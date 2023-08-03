@@ -1,4 +1,4 @@
-# Project Name
+# EDA Project
 This project is an exploratory data analysis (EDA) on the data set of stroke risk factors.
 
 #### -- Project Status: Completed
@@ -39,8 +39,21 @@ Next steps and future directions
 3. If you wish to interact with the original R codes we used to generate the analysis, you could either:
    * open EDA_final.Rmd (codebook/EDA_final.Rmd) in your computer if RStudio has been installed
    * use the virtual environment here: [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/radioactive235/EDA-Project.git/HEAD) (note: any changes made in this virtual envrionment will NOT be 
-     saved!)
+     saved!). This virtual environment will take some time to launch.
 
+## Directory Structure
+.
+└── EDA-Project/
+    ├── codebook/
+    │   ├── EDA_final.Rmd
+    │   ├── EDA_final.html
+    │   ├── diabetes_012_health_indicators_BRFSS2015.csv
+    │   └── ga_data_inc.csv
+    ├── .gitignore
+    ├── README.md
+    ├── install.r
+    └── runtime.txt
+(note: the two .csv files in the codebook/ folder are data sets used in the analysis)
 
 ## Featured Notebooks/Analysis/Deliverables
 * EDA_final.Rmd (codebook/EDA_final.Rmd)
