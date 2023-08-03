@@ -3,9 +3,6 @@ This project is an exploratory data analysis (EDA) on the data set of stroke ris
 
 #### -- Project Status: Completed
 
-## Project Intro/Objective
-The purpose of this project is ________. (Describe the main goals of the project and potential civic impact. Limit to a short paragraph, 3-6 Sentences)
-
 ### Methods Used
 * Basic Statistics
 * Student's T-Test
