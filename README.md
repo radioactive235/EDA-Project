@@ -39,6 +39,7 @@ Next steps and future directions
      saved!). This virtual environment will take some time to launch.
 
 ## Directory Structure
+```
 .
 └── EDA-Project/
     ├── codebook/
@@ -50,6 +51,7 @@ Next steps and future directions
     ├── README.md
     ├── install.r
     └── runtime.txt
+```
 (note: the two .csv files in the codebook/ folder are data sets used in the analysis)
 
 ## Featured Notebooks/Analysis/Deliverables
