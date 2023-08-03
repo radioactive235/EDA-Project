@@ -1,0 +1,1048 @@
+---
+title: "Exploratory Analysis on Data Set of Stroke Risk Indicators"
+author: "Anji Ni, Jared Darrow"
+output: html_document
+date: "2023-07-18"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggplot2)
+library(cowplot)
+library(scales)
+library(dplyr)
+```
+
+
+```{r importData, include=TRUE}
+# import data set
+originalDt <- read_csv("diabetes_012_health_indicators_BRFSS2015.csv",show_col_types = FALSE)
+```
+
+### Introduction to the data set
+
+The data set to be explored is an adapted version of the 2015 survey results (https://www.kaggle.com/datasets/cdc/behavioral-risk-factor-surveillance-system) from The Behavioral Risk Factor Surveillance System (BRFSS). BRFSS, operated by Centers of Disease Control and Prevention (CDC), is a system that collects data "on preventive health practices and risk behaviors that are linked to chronic diseases, injuries, and preventable infectious diseases " via telephone surveys every year. In 2015, the population for the survey is consisted of adult residents from all 50 states of the U.S., as well as the District of Columbia and three U.S. territories.The original data set contains 441,455 observations and 330 variables that recorded responses to questions in the survey, and these variables provide demographic, health related and other calculated data of each participant. In the adapted data set, the author Alex Teboul processed the original data and posted the cleaned data set to Kaggle (https://www.kaggle.com/datasets/alexteboul/diabetes-health-indicators-dataset). In Teboul's treatment,important risk factors are selected and refactored for readability, and NA values are dropped. After processing, the data set has 253,680 observations and 22 variables. In both original and adapted data set, the privacy of participants are protected by excluding any identifiable information. 
+
+### Examination and Categorization of Data
+
+```{r examination, include=TRUE}
+knitr::kable(head(originalDt), col.names = gsub("[.]", " ", names(originalDt)))
+```
+
+In preliminary examination of the data set, we retrieved detailed explanation of each variable from the official codebook (https://www.cdc.gov/brfss/annual_data/2015/pdf/codebook15_llcp.pdf). It is worth noting that most variables in this data set are discrete except for BMI, which in principle is continuous but reported as integers in this survey. 
+
+```{r categorize, include=TRUE}
+# get column names of the data set
+names(originalDt)
+```
+
+In terms of the aspect being assessed, variables are categorized into three classes:
+
+1. **target**  
+Although the data set features indicators that help to predict whether a person has diabetes, it also contains stroke status of the person. In addition, most of the selected variables in the data set are also risk factors for stroke. Therefore, we choose stroke as our target (dependent variable), which better fits in our academic interests.
+
+2. **socioeconomically related variables**  
+Age, Education, Income, AnyHealthcare, NoDocbcCost
+
+3. **health/personal variables**  
+Within this class, we subdivided variables into two categories:
+  &nbsp;&nbsp;(a) lifestyle factors: BMI, Smoker, PhysActivity, Fruits, Veggies, HvyAlcoholConsump
+  &nbsp;&nbsp;(b) disease factors: Diabetes_012, HighBP, HighChol (CholCheck related to this variable)
+
+Other variables not included in these categories are considered irrelevant.
+
+### Analysis overview
+
+Based on the categorization, we decide to approach the exploration of the data set from two perspectives. Firstly, we study the relationship between Education/Income and stroke risk at socioeconomic level. Adding on to this point, we also select a series of variables from the health/personal class to investigate the correlation between these factors and stroke risk. After these two parts, we dive deep into the specific case of state of Georgia to look at the correlation between socioeconomic status and stroke incidence/mortality.
+
+
+```{r workingDt, include=FALSE,echo=FALSE}
+# prepare the working data set
+# subset based on col
+selectedVar <- c("Stroke","Diabetes_012","HighBP","HighChol","CholCheck","HeartDiseaseorAttack","PhysActivity","BMI","Smoker","Fruits","Veggies","HvyAlcoholConsump","Income","Education")
+
+strokeDt <- originalDt %>%
+  select(selectedVar)
+
+# NA values in each col
+strokeDt %>% 
+  summarize(across(everything(), ~ sum(is.na(.))))
+```
+
+### Analysis on Socioeconomic Factors
+
+Socioeconomic factors, such as income and education level, can significantly impact an individual's access to resources and thus their overall health. By investigating the association between socioeconomic status and stroke, we can gain insights into the underlying social determinants of stroke risks.
+
+#### Association betwen income/education level and stroke
+
+```{r basic_stat_income_edu,include=TRUE}
+# median income and education level
+med_income <- median(strokeDt$Income)
+med_edu <- median(strokeDt$Education)
+print(paste("The median for income level is",med_income,", and the median for education level is",med_edu))
+```
+
+```{r numPpl_dist, include=FALSE}
+summary_tibble <-
+strokeDt %>% 
+  group_by(Income,Education) %>% 
+  summarise(num_ppl = n(),
+            Stroke_1 = sum(Stroke == 1),
+            Stroke_0 = sum(Stroke == 0),
+            Stroke_1_pct = Stroke_1/num_ppl*100,
+            Stroke_0_pct = 100 - Stroke_1_pct) %>% 
+  ungroup()
+```
+
+```{r , include=TRUE}
+# heat map of number of people in each group of income vs. education
+summary_tibble %>% 
+  ggplot(aes(Income, Education))+
+  geom_tile(aes(fill = num_ppl))+
+  scale_fill_gradient(low = "white",high = "black",labels = comma_format())+
+  labs(fill = "Number of people", title="Number of people in groups of different income and education levels")+
+  geom_text(aes(label = num_ppl), color = "darkblue", size = 3, fontface = "bold")+
+  theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+The data set represents people from all the income levels ranging from annual income less than \$10,000(1) to more than \$75,000(8), and all the education levels ranging from "never attended school"(1) to "college graduate"(6). The relative weight of each group, however, is not equal. As indicated by the median income and education level (7 and 5, respectively), respondents in the survey tend to be well paid and educate. The same trend can be better visualized with the heat matrix, where sample population concentrates at the top-right quadrant. Therefore, the implication of the imbalanced group size distribution should be considered in the following analysis. 
+
+```{r incomeEduStroke, include=TRUE}
+# bar plot for income vs stroke
+income_stroke <-
+strokeDt %>% 
+  group_by(Income) %>%
+  summarise(
+            numPpl = n(),
+            Stroke_1 = sum(Stroke == 1),
+            Stroke_0 = sum(Stroke == 0),
+            Stroke_1_pct = Stroke_1/numPpl*100,
+            Stroke_0_pct = 100 - Stroke_1_pct)%>% 
+  ungroup() %>% 
+  select(Income,Stroke_1_pct,Stroke_0_pct) %>% 
+  pivot_longer(-Income, names_to = "variable", values_to = "Percent") %>% 
+  ggplot(aes(x = Income, y = Percent, fill = variable)) + 
+  geom_bar(stat = "identity", position = "dodge", width = 1)+
+  scale_fill_manual(values = c("lightblue", "red"),labels=c('No Stroke', 'Has Stroke'))+
+  labs(fill = 'Stroke Status',y="Percentage")+
+  theme(plot.title = element_text(hjust = 0.5),legend.position = "None")
+
+# bar plot for education vs stroke
+edu_stroke <-
+strokeDt %>% 
+  group_by(Education) %>%
+  summarise(
+            numPpl = n(),
+            Stroke_1 = sum(Stroke == 1),
+            Stroke_0 = sum(Stroke == 0),
+            Stroke_1_pct = Stroke_1/numPpl*100,
+            Stroke_0_pct = 100 - Stroke_1_pct)%>% 
+  ungroup() %>% 
+  select(Education,Stroke_1_pct,Stroke_0_pct) %>% 
+  pivot_longer(-Education, names_to = "variable", values_to = "Percent") %>% 
+  ggplot(aes(x = Education, y = Percent, fill = variable)) + 
+  geom_bar(stat = "identity", position = "dodge", width = 1)+
+  scale_fill_manual(values = c("lightblue", "red"),labels=c('No Stroke', 'Has Stroke'))+
+  labs(fill = 'Stroke Status',y="Percentage")+
+  theme(plot.title = element_text(hjust = 0.5),legend.position = "None") 
+
+# combine two plots together
+combined_plot<-plot_grid(income_stroke, edu_stroke,ncol=2)
+
+legend <- get_legend(
+  income_stroke +
+    guides(color = guide_legend(nrow = 1)) +
+    theme(legend.position = "bottom")
+  )
+
+title <- ggdraw() + 
+  draw_label(
+    "Stroke ratio distribution with respect to income/education levels",
+    x =0.5,
+    hjust = 0.5,
+    size = 16,
+  )
+
+plot_grid(title,combined_plot,legend,ncol=1,rel_heights = c(0.1, 1))
+```
+
+After learning overall income and education situations of the sample respondents, we then investigate the association between these two socioeconomic variables and stroke risk. In the histograms above, the right-skewed distributions demonstrate that income and education level are associated with stroke risk respectively, where people ranked higher in these two levels are less likely to have stroke.
+
+```{r , include=TRUE}
+# distribution of stroke risk with respect to income and education levels
+summary_tibble %>% 
+  mutate(Income_Edu = paste(Income, Education, sep = ",")) %>% 
+  select(Income_Edu,Stroke_1_pct,Stroke_0_pct) %>% 
+  pivot_longer(-Income_Edu, names_to = "variable", values_to = "Percent") %>% 
+  ggplot(aes(x = Income_Edu, y = Percent, fill = variable)) + 
+  geom_bar(stat = "identity", position = "dodge", width = 1)+
+  scale_fill_manual(values = c("lightblue", "red"),labels=c('No Stroke', 'Has Stroke'))+
+  labs(fill = 'Stroke Status',x = "(Income level, Education level)",y="Percentage",title="Stroke ratio distribution with respect to combined income and educations levels")+
+  theme(plot.title = element_text(hjust = 0.5),axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+The same trend can be clearly presented in the histogram above where the independent variable is combined income and education level: within each income level, the ratio of experiencing stroke decreases with increased education level; and across all the income levels, the risk of stroke also decreases significantly with increased annual income.
+
+### Analysis on Health/Personal Factors
+
+Moving on from the socioeconomic view, we further investigate the association between health-related factors and stroke risk because many research results have indicated that daily life habits and other diseases can lead to higher probability of stroke.
+
+#### BMI and stroke
+
+```{r BMIStroke, include=TRUE}
+strokeDt %>% 
+  group_by(BMI) %>%
+  summarise(
+            numPpl = n(),
+            Stroke_1 = sum(Stroke == 1),
+            Stroke_0 = sum(Stroke == 0),
+            Stroke_1_pct = Stroke_1/numPpl*100,
+            Stroke_0_pct = 100 - Stroke_1_pct) %>% 
+  select(BMI,Stroke_1_pct,Stroke_0_pct) %>% 
+  ungroup() %>% 
+  pivot_longer(-BMI, names_to = "variable", values_to = "Percent") %>% 
+  ggplot(aes(x = BMI, y = Percent, color = variable)) + 
+  geom_point()+
+  scale_color_manual(values = c("lightblue", "red"),labels=c('No Stroke', 'Has Stroke'))+
+  labs(color = 'Stroke Status', title = "BMI distribution with respect to stroke status",y="Percentage")+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+BMI's correlation with stroke risk is studied separately first since it is the only continuous variable among all the health-related factors. As indicated by the scatter plot above, proportion of people who experienced stroke distributes equally across group with different BMI. Thus, BIM is excluded from the following association analysis.
+
+#### Adverse factors
+
+```{r adverseFactors, include=TRUE}
+# refactor the Diabetes_012 values to represent both pre-diabetes and diabetes(2 originally) with 1
+healthDt <- data.frame(strokeDt)
+healthDt$Diabetes_012[healthDt$Diabetes_012==2] = 1
+
+# drop responses where CholCheck == 0 (interviewee did not check cholesterol level within past five years)
+healthDt <- healthDt[healthDt$CholCheck == 1, ]
+
+# define adverse factors
+adverse_disease <- c("Diabetes_012","HighBP","HighChol","HeartDiseaseorAttack")
+adverse_lifestyle <- c("Smoker","HvyAlcoholConsump")
+```
+
+```{r ,include=FALSE}
+# Examine if there is association between number of risk factors and probability of having stroke
+sumTable_disease <-
+healthDt %>% 
+  select(Stroke,adverse_disease) %>% 
+  mutate(num_adverse_factors = Diabetes_012 + HighBP + HighChol + HeartDiseaseorAttack) %>% 
+  group_by(num_adverse_factors) %>% 
+  summarise(num_ppl = n(),
+            Stroke_1 = sum(Stroke==1),
+            Stroke_1_pct_disease = Stroke_1/num_ppl*100) %>% 
+  ungroup()
+
+sumTable_adv_lifestyle <-
+healthDt %>% 
+  select(Stroke,adverse_lifestyle) %>% 
+  mutate(num_adverse_factors = Smoker + HvyAlcoholConsump)%>% 
+  group_by(num_adverse_factors) %>% 
+  summarise(num_ppl = n(),
+            Stroke_1 = sum(Stroke==1),
+            Stroke_1_pct_lifestyle = Stroke_1/num_ppl*100) %>% 
+  ungroup()
+```
+
+
+```{r disease_lifstyle,include=TRUE}
+# visualize the results
+pivoted_disease <-
+sumTable_disease %>% 
+  select(num_adverse_factors,Stroke_1_pct_disease) %>% 
+  pivot_longer(-num_adverse_factors, names_to = "variable", values_to = "Percent") # reshape the table
+
+pivoted_adv_lifestyle <-
+sumTable_adv_lifestyle %>% 
+  select(num_adverse_factors,Stroke_1_pct_lifestyle) %>% 
+  pivot_longer(-num_adverse_factors, names_to = "variable", values_to = "Percent") # reshape the table
+
+combinedDt_adver <- rbind(pivoted_disease,pivoted_adv_lifestyle) # combine two reshaped tables together
+
+combinedDt_adver %>%
+ggplot(aes(x=num_adverse_factors,y=Percent,color=variable))+
+  geom_line()+
+  geom_point(size=3)+
+  scale_color_manual(values = c("blue", "red"),labels=c('Disease', 'Adverse lifestyle'))+
+  labs(color = 'Type of adverse factors', title = "Association between number of adverse factors and stroke",x="Number of adverse factors",y="Percentage of stroke")+
+  theme(plot.title = element_text(hjust = 0.5))
+  
+```
+
+Given the fact that most health related factors are "yes or no" questions with binary value, we choose total number of certain type of factors to which a respondent answers "yes" as the independent variable in our analysis. In this manner, the relationship between a series of factors and stroke can be examined in a single treatment. 
+
+The factors expected to have negative influence on one's health, namely diseases and adverse life habits, are studied first. The result shows that chronic diseases - including high blood pressure, diabetes, and high cholesterol - and cardiovascular disease are significantly associated with high stroke risk. By contrast, adverse lifestyles such as smoking and heavy alcohol consumption do not exhibit clear correlation with stroke risk. 
+
+#### favorable factors
+
+```{r favorable, include=TRUE}
+# define favorable factors
+favorable_factors <- c("PhysActivity","Fruits","Veggies")
+
+# Examine if there is association between number of favorable factors and probability of having stroke
+healthDt %>% 
+  select(Stroke,favorable_factors) %>% 
+  mutate(num_favor_factors = PhysActivity + Fruits + Veggies) %>% 
+  group_by(num_favor_factors) %>% 
+  summarise(num_ppl = n(),
+            Stroke_1 = sum(Stroke==1),
+            Stroke_1_pct = Stroke_1/num_ppl*100) %>% 
+  ungroup() %>% 
+  ggplot(aes(x=num_favor_factors,y=Stroke_1_pct))+
+  geom_line(color="darkgreen")+
+  geom_point(size=3,color="darkgreen")+
+  labs(title = "Association between number of favorable factors and stroke",x="Number of favorable factors",y="Percentage of stroke")+
+  theme(plot.title = element_text(hjust = 0.5),legend.position="none")
+```
+
+The relationship between factors favorable to one's health and stroke risk are also studied for thorough understanding of stroke risk determinants. As the proportion of stroke decreases with total number of favorable factors, the result indicates that regular exercise and consumption of fruits and vegetables help to reduce the stroke risk.
+
+#### Stroke prediction score
+
+Based on the associations discovered in the previous sections, a stroke prediction score is developed to assess a respondent's risk of experiencing stroke. The score is calculated by subtracting total number of favorable factors from total number of adverse factors that a respondent have, and the distribution of the score is visualized in the box plot below.
+
+```{r stroke_score, include=TRUE}
+healthDt %>% 
+  mutate(score = Diabetes_012 + HighBP + HighChol + HeartDiseaseorAttack - (PhysActivity + Fruits + Veggies),
+         stroke_fct = as.factor(Stroke)) %>% 
+  select(stroke_fct,score) %>% 
+  ggplot(aes(x=stroke_fct,y=score,fill=stroke_fct))+
+  geom_boxplot(width=0.3)+
+  labs(title = "Distribution of stroke prediction score",x=" ",y="Score",fill="Stroke status")+
+  theme(plot.title = element_text(hjust = 0.5))+
+  scale_fill_manual(values = c("blue", "red"),labels=c('No stroke', 'Has stroke'))
+```
+
+Although the interquartile range are equal for both groups, the "has stroke" group score higher by 1 point overall than the "no stroke" group. This result is generally consistent with the associations between health related factors and stroke risk discovered previously.A comparison between the median score of both groups demonstrates that favorable factors may not neutralize the negative effect of adverse factors, but more favorable factors in general can help to decrease the stroke risk. 
+
+#### reflection
+
+First and second part of this analysis can be potentially correlated because the socioeconomic status of a person can also influence their lifestyle and general health condition. Therefore, the underlying relationship behind these two aspects of the analysis should be further scrutinized, and this may become a topic for the research project.
+
+### Maps
+#### Forward
+The code below is meant to geographically display the percent changes for stroke mortality rates and per capita income across 2010-2019. Our reasons for providing these maps is that is summarizes the data much more succintly compared to using the ggplot2 package and that we are able to include more information into the graphics that we would otherwise not be able to include using ggplots. We planned on using these graphs to provide an understanding of trends over time to display any behavior over two-year intervals between the two variables -- stroke mortality and per capita income.
+##### Importing dataset and installing packages 
+
+**packages required for leaflet maps**
+```{r, message=FALSE,include=FALSE}
+# loading the packages 
+library(tigris)
+library(leaflet)
+library(htmlwidgets)
+library(htmltools)
+```
+
+In order to use the spatial data from the tigris package for each county in Georgia, we had to make some minor changes to the spelling of county names such that when the original data was joined with the spatial data (from the tigris package), no data from *our* dataset would be accidentally excluded.
+```{r, echo=FALSE}
+# importing the original data set (finalized data for the project)
+data <- read_csv("ga_data_inc.csv")
+data <- data %>% # eliminating extra numbered column that appears when importing the dataset
+  select(!...1)
+head(data) # display first 10 rows
+#correcting county spellings for specific counties so that names match when joining spatial data in following lines of code 
+data$county <- str_to_title(data$county)
+replace_str <- c("Dekalb" = "DeKalb", "Mcintosh" = "McIntosh", "Mcduffie" = "McDuffie")
+data$county <- str_replace_all(data$county, replace_str)
+```
+
+### Stroke Mortality Rates
+#### Older Population (65+ Years Old)
+The interactive map below displays the code used to calculate the percent changes in stroke mortality rates across all Georgian counties for the older population (Ages 65 years and older), which was later joined with the spatial data (in shapefile format) to create the leaflet maps.
+**Further tweaking data and merging with spatial data**
+```{r, results='hide',message=FALSE}
+# calculating average mortality rates across two-year intervals and providing the percent change 
+# for 2010-11. This is done for later years in the data 
+data_perchange_stroke_old <- data %>%
+  select(state, county, year, rate, age) %>%
+  filter(age == "Ages 65 years and older") %>%
+  group_by(county, year) %>%
+  summarize(avg_mort = mean(rate)) %>%
+  mutate(per_change = (avg_mort/lag(avg_mort) - 1) * 100) %>%
+  select(county, avg_mort, per_change, year)
+
+# eliminate the NAs from the percent change variables (essentially the percent change from 2009-2010 which will not be included in the data set)
+data_perchange_stroke_old <- subset(data_perchange_stroke_old, !is.na(per_change))
+
+# using the tigris package to create spatial data that is merged with stroke dataset for leaflet package
+counties <- counties("Georgia", cb = TRUE)
+```
+```{r}
+# Using the Tigris function left_join to bring together 
+# the state shapefile and the Georgia stroke mortality data -- NAMES and county
+# are the two columns that these two sets will be joined by
+merged_gadata_stroke_old <- left_join(counties, data_perchange_stroke_old, by = c("NAME" = "county"))
+head(merged_gadata_stroke_old)
+
+```
+**Creating map variables used with leaflet package**
+
+```{r, results='hide',include=FALSE}
+# These map variables are taken from the *merged_gadata_stroke_old* set and then filtered by each of the different years that contain the percent change (%) across each of the two year intervals. For instance, *merged_gadata_2011_stroke_old* contains stroke mortality data from 2010-2011 to account for the percent change. The same follows for the other variables. In the original dataset, there were no mortality rate values for Taliaferro County (in eastern Georgia), so it comes up blank on the map.
+
+# creating subsets of the data for different two-year intervals 
+merged_gadata_2011_stroke_old <- merged_gadata_stroke_old %>%
+  filter(year == 2011)
+merged_gadata_2012_stroke_old <- merged_gadata_stroke_old %>%
+  filter(year == 2012)
+merged_gadata_2013_stroke_old <- merged_gadata_stroke_old %>%
+  filter(year == 2013)
+merged_gadata_2014_stroke_old <- merged_gadata_stroke_old %>%
+  filter(year == 2014)
+merged_gadata_2015_stroke_old <- merged_gadata_stroke_old %>%
+  filter(year == 2015)
+merged_gadata_2016_stroke_old <- merged_gadata_stroke_old %>%
+  filter(year == 2016)
+merged_gadata_2017_stroke_old <- merged_gadata_stroke_old %>%
+  filter(year == 2017)
+merged_gadata_2018_stroke_old <- merged_gadata_stroke_old %>%
+  filter(year == 2018)
+merged_gadata_2019_stroke_old <- merged_gadata_stroke_old %>%
+  filter(year == 2019)
+
+# Creating a color palette based on the mortality rate range in the original data set
+pal_stroke_old <- colorNumeric("RdYlGn", domain = merged_gadata_stroke_old$per_change, reverse = TRUE)
+
+# Setting up the pop up text that will be displayed on the map for each interval 
+popup_text_2011_stroke_old <- paste0("<strong> county name: </strong>", merged_gadata_2011_stroke_old$NAME, "<br>",
+                     "<strong> stroke mortality % change: </strong>", merged_gadata_2011_stroke_old$per_change, "<br>",
+                     "<strong> average stroke mortality rate (per 100,000): </strong>", merged_gadata_2011_stroke_old$avg_mort)
+popup_text_2012_stroke_old <- paste0("<strong> county name: </strong>", merged_gadata_2012_stroke_old$NAME, "<br>",
+                          "<strong> stroke mortality % change: </strong>", merged_gadata_2012_stroke_old$per_change, "<br>",
+                          "<strong> average stroke mortality rate (per 100,000): </strong>", merged_gadata_2012_stroke_old$avg_mort)
+popup_text_2013_stroke_old <- paste0("<strong> county name: </strong>", merged_gadata_2013_stroke_old$NAME, "<br>",
+                          "<strong> stroke mortality % change: </strong>", merged_gadata_2013_stroke_old$per_change, "<br>",
+                          "<strong> average stroke mortality rate (per 100,000): </strong>", merged_gadata_2013_stroke_old$avg_mort)
+popup_text_2014_stroke_old <- paste0("<strong> county name: </strong>", merged_gadata_2014_stroke_old$NAME, "<br>",
+                          "<strong> stroke mortality % change: </strong>", merged_gadata_2014_stroke_old$per_change, "<br>",
+                          "<strong> average stroke mortality rate (per 100,000): </strong>", merged_gadata_2014_stroke_old$avg_mort)
+popup_text_2015_stroke_old <- paste0("<strong> county name: </strong>", merged_gadata_2015_stroke_old$NAME, "<br>",
+                          "<strong> stroke mortality % change: </strong>", merged_gadata_2015_stroke_old$per_change, "<br>",
+                          "<strong> average stroke mortality rate (per 100,000): </strong>", merged_gadata_2015_stroke_old$avg_mort)
+popup_text_2016_stroke_old <- paste0("<strong> county name: </strong>", merged_gadata_2016_stroke_old$NAME, "<br>",
+                          "<strong> stroke mortality % change: </strong>", merged_gadata_2016_stroke_old$per_change, "<br>",
+                          "<strong> average stroke mortality rate (per 100,000): </strong>", merged_gadata_2016_stroke_old$avg_mort)
+popup_text_2017_stroke_old <- paste0("<strong> county name: </strong>", merged_gadata_2017_stroke_old$NAME, "<br>",
+                          "<strong> stroke mortality % change: </strong>", merged_gadata_2017_stroke_old$per_change, "<br>",
+                          "<strong> average stroke mortality rate (per 100,000): </strong>", merged_gadata_2017_stroke_old$avg_mort)
+popup_text_2018_stroke_old <- paste0("<strong> county name: </strong>", merged_gadata_2018_stroke_old$NAME, "<br>",
+                          "<strong> stroke mortality % change: </strong>", merged_gadata_2018_stroke_old$per_change, "<br>",
+                          "<strong> average stroke mortality rate (per 100,000): </strong>", merged_gadata_2018_stroke_old$avg_mort)
+popup_text_2019_stroke_old <- paste0("<strong> county name: </strong>", merged_gadata_2019_stroke_old$NAME, "<br>",
+                          "<strong> stroke mortality % change: </strong>", merged_gadata_2019_stroke_old$per_change, "<br>",
+                          "<strong> average stroke mortality rate (per 100,000): </strong>", merged_gadata_2019_stroke_old$avg_mort)
+
+# creating title for map
+tag.map.title <- tags$style(HTML("
+  .leaflet-control.map-title { 
+    transform: translate(-50%,20%);
+    position: fixed !important;
+    left: 50%;
+    text-align: center;
+    padding-left: 10px; 
+    padding-right: 10px; 
+    background: rgba(255,255,255,0.75);
+    font-weight: bold;
+    font-size: 18px;
+  }
+"))
+
+title <- tags$div(
+  tag.map.title, HTML("Percent Change (%) <br> Stroke Mortality Rates <br> For 65+ Years Old <br> (2010-2019)")
+)  
+```
+
+Below is the code used to create the interactive map. Layer controls for each of the two-year intervals for the percent change 
+```{r,warning=FALSE}
+# Mapping the data with the new tiles
+leaflet(height = 750, width = 900) %>%
+  addTiles() %>%
+  addPolygons(data = merged_gadata_2011_stroke_old, fillColor = ~pal_stroke_old(merged_gadata_2011_stroke_old$per_change),
+              fillOpacity = 0.7,
+              weight = 1,
+              color = "white",
+              smoothFactor = 0.5,
+              popup = ~popup_text_2011_stroke_old,
+              group = "2010-2011") %>%
+  addPolygons(data = merged_gadata_2012_stroke_old, fillColor = ~pal_stroke_old(merged_gadata_2012_stroke_old$per_change),
+              fillOpacity = 0.7,
+              weight = 1,
+              color = "white",
+              smoothFactor = 0.5,
+              popup = ~popup_text_2012_stroke_old,
+              group = "2011-2012") %>%
+  addPolygons(data = merged_gadata_2013_stroke_old, fillColor = ~pal_stroke_old(merged_gadata_2013_stroke_old$per_change),
+              fillOpacity = 0.7,
+              weight = 1,
+              color = "white",
+              smoothFactor = 0.5,
+              popup = ~popup_text_2013_stroke_old,
+              group = "2012-2013") %>%
+  addPolygons(data = merged_gadata_2014_stroke_old, fillColor = ~pal_stroke_old(merged_gadata_2014_stroke_old$per_change),
+              fillOpacity = 0.7,
+              weight = 1,
+              color = "white",
+              smoothFactor = 0.5,
+              popup = ~popup_text_2014_stroke_old,
+              group = "2013-2014") %>%
+  addPolygons(data = merged_gadata_2015_stroke_old, fillColor = ~pal_stroke_old(merged_gadata_2015_stroke_old$per_change),
+              fillOpacity = 0.7,
+              weight = 1,
+              color = "white",
+              smoothFactor = 0.5,
+              popup = ~popup_text_2015_stroke_old,
+              group = "2014-2015") %>%
+  addPolygons(data = merged_gadata_2016_stroke_old, fillColor = ~pal_stroke_old(merged_gadata_2016_stroke_old$per_change),
+              fillOpacity = 0.7,
+              weight = 1,
+              color = "white",
+              smoothFactor = 0.5,
+              popup = ~popup_text_2016_stroke_old,
+              group = "2015-2016") %>%
+  addPolygons(data = merged_gadata_2017_stroke_old, fillColor = ~pal_stroke_old(merged_gadata_2017_stroke_old$per_change),
+              fillOpacity = 0.7,
+              weight = 1,
+              color = "white",
+              smoothFactor = 0.5,
+              popup = ~popup_text_2017_stroke_old,
+              group = "2016-2017") %>%
+  addPolygons(data = merged_gadata_2018_stroke_old, fillColor = ~pal_stroke_old(merged_gadata_2018_stroke_old$per_change),
+              fillOpacity = 0.7,
+              weight = 1,
+              color = "white",
+              smoothFactor = 0.5,
+              popup = ~popup_text_2018_stroke_old,
+              group = "2017-2018") %>%
+  addPolygons(data = merged_gadata_2019_stroke_old, fillColor = ~pal_stroke_old(merged_gadata_2019_stroke_old$per_change),
+              fillOpacity = 0.7,
+              weight = 1,
+              color = "white",
+              smoothFactor = 0.5,
+              popup = ~popup_text_2019_stroke_old,
+              group = "2018-2019") %>%
+  addLegend(pal = pal_stroke_old,
+            values = merged_gadata_stroke_old$per_change,
+            position = "topright",
+            title = "% Change", 
+            labFormat = labelFormat(suffix = "%")) %>%
+  addControl(title, position = "topleft",className = "map-title") %>%
+  addLayersControl(
+    baseGroups = c("2010-2011","2011-2012","2012-2013","2013-2014","2014-2015","2015-2016","2016-2017","2017-2018","2018-2019"),
+    position = "topright",
+    options = layersControlOptions(collapsed = FALSE)
+  )
+
+```
+##### Stroke Mortality Analysis (Older Population)
+The overall pattern that we noticed when checking the percent changes for the older populationacross two-year intervals is that there is a wave-like trend in percent changes among stroke mortality rates. Similar to how infectious diseases have wave-like behavior over time when considering infection rates, the stroke mortality rates tend to show a similar trend; however, the counties in which there are waves -- increases and decreases in stroke mortality rates -- are entirely random. The counties that experienced these wave-like increases/decreases were southeast and north Georgia. In southeast Georgia -- the counties located around and below Savannah -- the percent change of the 2013-2014 interval was approximately +12% compared to the previous year along with other counties having positive percent changes. When viewing the 2014-2015, there was a negative percent change; however, north Georgia (and parts of central Georgia) had positive percent changes as high as +17% and +12% in Cobb county and Gwinnett county respectively. This, like southeastern Georgia followed a similar trend where a negative percent change was observed for the 2015-2016 interval; the only exception to this was Cobb county (+19% change). 
+
+Trends beyond these intervals remained relatively steady, hardly breaking the +/-10% change mark. The 2018-2019 interval showed the greatest decrease in percent change with not a single county showing a positive percent change.
+
+#### Younger Population (Ages 35-64 Years Old) 
+
+Similar to what was done for the older population, the stroke mortality percent changes for the younger population was generated in a choropleth map using the Leaflet package. Likewise, the % changes were separated into two-year intervals.
+
+**tweaking data and merging spatial data**
+```{r ,warning=FALSE,message=FALSE}
+# calculating average mortality rates across two-year intervals and providing the percent change 
+# for 2010-11. This is done for later years in the data 
+data_perchange_stroke_young <- data %>%
+  select(state, county, year, rate, age) %>%
+  filter(age == "Ages 35-64 years") %>%
+  group_by(county, year) %>%
+  summarize(avg_mort = mean(rate)) %>%
+  mutate(per_change = (avg_mort/lag(avg_mort) - 1) * 100) %>%
+  select(county, avg_mort, per_change, year)
+
+# eliminate the NAs from the percent change variables (essentially the percent change from 2009-2010 which will not be included in the data set)
+data_perchange_stroke_young <- subset(data_perchange_stroke_young, !is.na(per_change))
+
+```
+
+
+```{r,warning=FALSE,message=FALSE}
+# Using the Tigris function left_join to bring together 
+# the state shapefile and the Georgia stroke mortality data -- NAMES and county
+# are the two columns that these two sets will be joined by
+merged_gadata_stroke_young <- left_join(counties, data_perchange_stroke_young, by = c("NAME" = "county"))
+```
+
+**Creating map variables used with leaflet package**
+
+```{r, results='hide',include=FALSE}
+#These map variables are taken from the *merged_gadata_stroke_young* set and then filtered by each of the different years that contain the percent change (%) across each of the two year intervals. For instance, *merged_gadata_2011_stroke_young* contains stroke mortality data from 2010-2011 to account for the percent change. The same follows for the other variables. 
+
+# creating subsets of the data for different two-year intervals 
+merged_gadata_2011_stroke_young <- merged_gadata_stroke_young %>%
+  filter(year == 2011)
+merged_gadata_2012_stroke_young <- merged_gadata_stroke_young %>%
+  filter(year == 2012)
+merged_gadata_2013_stroke_young <- merged_gadata_stroke_young %>%
+  filter(year == 2013)
+merged_gadata_2014_stroke_young <- merged_gadata_stroke_young %>%
+  filter(year == 2014)
+merged_gadata_2015_stroke_young <- merged_gadata_stroke_young %>%
+  filter(year == 2015)
+merged_gadata_2016_stroke_young <- merged_gadata_stroke_young %>%
+  filter(year == 2016)
+merged_gadata_2017_stroke_young <- merged_gadata_stroke_young %>%
+  filter(year == 2017)
+merged_gadata_2018_stroke_young <- merged_gadata_stroke_young %>%
+  filter(year == 2018)
+merged_gadata_2019_stroke_young <- merged_gadata_stroke_young %>%
+  filter(year == 2019)
+
+# Creating a color palette based on the mortality rate range in the original data set
+pal_stroke_young <- colorNumeric("RdYlGn", domain = merged_gadata_stroke_young$per_change, reverse = TRUE)
+
+# Setting up the pop up text that will be displayed on the map for each interval 
+popup_text_2011_stroke_young <- paste0("<strong> county name: </strong>", merged_gadata_2011_stroke_young$NAME, "<br>",
+                     "<strong> stroke mortality % change: </strong>", merged_gadata_2011_stroke_young$per_change, "<br>",
+                     "<strong> average stroke mortality rate (per 100,000): </strong>", merged_gadata_2011_stroke_young$avg_mort)
+popup_text_2012_stroke_young <- paste0("<strong> county name: </strong>", merged_gadata_2012_stroke_young$NAME, "<br>",
+                          "<strong> stroke mortality % change: </strong>", merged_gadata_2012_stroke_young$per_change, "<br>",
+                          "<strong> average stroke mortality rate (per 100,000): </strong>", merged_gadata_2012_stroke_young$avg_mort)
+popup_text_2013_stroke_young <- paste0("<strong> county name: </strong>", merged_gadata_2013_stroke_young$NAME, "<br>",
+                          "<strong> stroke mortality % change: </strong>", merged_gadata_2013_stroke_young$per_change, "<br>",
+                          "<strong> average stroke mortality rate (per 100,000): </strong>", merged_gadata_2013_stroke_young$avg_mort)
+popup_text_2014_stroke_young <- paste0("<strong> county name: </strong>", merged_gadata_2014_stroke_young$NAME, "<br>",
+                          "<strong> stroke mortality % change: </strong>", merged_gadata_2014_stroke_young$per_change, "<br>",
+                          "<strong> average stroke mortality rate (per 100,000): </strong>", merged_gadata_2014_stroke_young$avg_mort)
+popup_text_2015_stroke_young <- paste0("<strong> county name: </strong>", merged_gadata_2015_stroke_young$NAME, "<br>",
+                          "<strong> stroke mortality % change: </strong>", merged_gadata_2015_stroke_young$per_change, "<br>",
+                          "<strong> average stroke mortality rate (per 100,000): </strong>", merged_gadata_2015_stroke_young$avg_mort)
+popup_text_2016_stroke_young <- paste0("<strong> county name: </strong>", merged_gadata_2016_stroke_young$NAME, "<br>",
+                          "<strong> stroke mortality % change: </strong>", merged_gadata_2016_stroke_young$per_change, "<br>",
+                          "<strong> average stroke mortality rate (per 100,000): </strong>", merged_gadata_2016_stroke_young$avg_mort)
+popup_text_2017_stroke_young <- paste0("<strong> county name: </strong>", merged_gadata_2017_stroke_young$NAME, "<br>",
+                          "<strong> stroke mortality % change: </strong>", merged_gadata_2017_stroke_young$per_change, "<br>",
+                          "<strong> average stroke mortality rate (per 100,000): </strong>", merged_gadata_2017_stroke_young$avg_mort)
+popup_text_2018_stroke_young <- paste0("<strong> county name: </strong>", merged_gadata_2018_stroke_young$NAME, "<br>",
+                          "<strong> stroke mortality % change: </strong>", merged_gadata_2018_stroke_young$per_change, "<br>",
+                          "<strong> average stroke mortality rate (per 100,000): </strong>", merged_gadata_2018_stroke_young$avg_mort)
+popup_text_2019_stroke_young <- paste0("<strong> county name: </strong>", merged_gadata_2019_stroke_young$NAME, "<br>",
+                          "<strong> stroke mortality % change: </strong>", merged_gadata_2019_stroke_young$per_change, "<br>",
+                          "<strong> average stroke mortality rate (per 100,000): </strong>", merged_gadata_2019_stroke_young$avg_mort)
+
+# creating title for map
+tag.map.title <- tags$style(HTML("
+  .leaflet-control.map-title { 
+    transform: translate(-50%,20%);
+    position: fixed !important;
+    left: 50%;
+    text-align: center;
+    padding-left: 20px; 
+    padding-right: 20px; 
+    background: rgba(255,255,255,0.75);
+    font-weight: bold;
+    font-size: 18px;
+  }
+"))
+
+title <- tags$div(
+  tag.map.title, HTML("Percent Change (%) <br> Stroke Mortality Rates <br> for 35-64 Years Old <br> (2010-2019)"))
+```
+
+Below is the choropleth map with layer controls for each of the two-year intervals 
+```{r, warning=FALSE}
+# Mapping the data with the new tiles
+leaflet(height = 750, width = 900) %>%
+  addTiles() %>%
+  addPolygons(data = merged_gadata_2011_stroke_young, fillColor = ~pal_stroke_young(merged_gadata_2011_stroke_young$per_change),
+              fillOpacity = 0.7,
+              weight = 1,
+              color = "white",
+              smoothFactor = 0.5,
+              popup = ~popup_text_2011_stroke_young,
+              group = "2010-2011") %>%
+  addPolygons(data = merged_gadata_2012_stroke_young, fillColor = ~pal_stroke_young(merged_gadata_2012_stroke_young$per_change),
+              fillOpacity = 0.7,
+              weight = 1,
+              color = "white",
+              smoothFactor = 0.5,
+              popup = ~popup_text_2012_stroke_young,
+              group = "2011-2012") %>%
+  addPolygons(data = merged_gadata_2013_stroke_young, fillColor = ~pal_stroke_young(merged_gadata_2013_stroke_young$per_change),
+              fillOpacity = 0.7,
+              weight = 1,
+              color = "white",
+              smoothFactor = 0.5,
+              popup = ~popup_text_2013_stroke_young,
+              group = "2012-2013") %>%
+  addPolygons(data = merged_gadata_2014_stroke_young, fillColor = ~pal_stroke_young(merged_gadata_2014_stroke_young$per_change),
+              fillOpacity = 0.7,
+              weight = 1,
+              color = "white",
+              smoothFactor = 0.5,
+              popup = ~popup_text_2014_stroke_young,
+              group = "2013-2014") %>%
+  addPolygons(data = merged_gadata_2015_stroke_young, fillColor = ~pal_stroke_young(merged_gadata_2015_stroke_young$per_change),
+              fillOpacity = 0.7,
+              weight = 1,
+              color = "white",
+              smoothFactor = 0.5,
+              popup = ~popup_text_2015_stroke_young,
+              group = "2014-2015") %>%
+  addPolygons(data = merged_gadata_2016_stroke_young, fillColor = ~pal_stroke_young(merged_gadata_2016_stroke_young$per_change),
+              fillOpacity = 0.7,
+              weight = 1,
+              color = "white",
+              smoothFactor = 0.5,
+              popup = ~popup_text_2016_stroke_young,
+              group = "2015-2016") %>%
+  addPolygons(data = merged_gadata_2017_stroke_young, fillColor = ~pal_stroke_young(merged_gadata_2017_stroke_young$per_change),
+              fillOpacity = 0.7,
+              weight = 1,
+              color = "white",
+              smoothFactor = 0.5,
+              popup = ~popup_text_2017_stroke_young,
+              group = "2016-2017") %>%
+  addPolygons(data = merged_gadata_2018_stroke_young, fillColor = ~pal_stroke_young(merged_gadata_2018_stroke_young$per_change),
+              fillOpacity = 0.7,
+              weight = 1,
+              color = "white",
+              smoothFactor = 0.5,
+              popup = ~popup_text_2018_stroke_young,
+              group = "2017-2018") %>%
+  addPolygons(data = merged_gadata_2019_stroke_young, fillColor = ~pal_stroke_young(merged_gadata_2019_stroke_young$per_change),
+              fillOpacity = 0.7,
+              weight = 1,
+              color = "white",
+              smoothFactor = 0.5,
+              popup = ~popup_text_2019_stroke_young,
+              group = "2018-2019") %>%
+  addLegend(pal = pal_stroke_young,
+            values = merged_gadata_stroke_young$per_change,
+            position = "topright",
+            title = "% Change", 
+            labFormat = labelFormat(suffix = "%")) %>%
+  addControl(title, position = "topleft",className = "map-title") %>%
+  addLayersControl(
+    baseGroups = c("2010-2011","2011-2012","2012-2013","2013-2014","2014-2015","2015-2016","2016-2017","2017-2018","2018-2019"),
+    position = "topright",
+    options = layersControlOptions(collapsed = FALSE)
+  )
+
+```
+
+#### Stroke Mortality Analysis (Younger Population)
+The younger population displays a different trend in percent changes compared to the older population. If follows a less wave-like behavior compared to the older population. The % change increases in stroke mortality rates vary from region to region; the stroke mortality rates do not differ randomly across all counties. Many of the increases and decreases in percent changes of the stroke mortality rates are localized to specific regions. For instance, the 2015-2016 interval displays a percent increase in stroke mortality rates in northern Georgia -- near Chattanooga and as far south as Cobb county. Others are 2016-2017 where much of the percent increases are located in central Georgia, near Macon and further southeast, and even 2014-2015, which has percent increases clustered in the southeastern counties (which was noted in the map of % change in the older population) and western Georgia. While there doesn't seem to be a notable trend that arises from viewing the map, it may be worthwhile inquiring about why increases in mortality rates are clustered as opposed to being randomly distributed across Georgia. 
+
+### Per Capita Income 
+Below is the code used to produce an interactive map of the *per capita* income percent change over time within the same decade as the stroke mortality rates. The code for this is nearly identical to that of the stroke mortality map code with some minor changes to the variables. A single-color scale is used to represent the intensity of the increases/decreases in percent changes of income levels. 
+
+**Calculating percent(%) change of income and merging spatial data**
+
+This code details the calculations that will be displayed in the map and joining the spatial data for the GA counties with our dataset using the *left_join* function.
+```{r, results='hide',message=FALSE}
+# calculating average income across two-year intervals and providing the percent change for all years (2010-19)
+data_perchange_inc <- data %>%
+  select(state, county, year, income) %>%
+  group_by(county, year) %>%
+  summarize(avg_inc = mean(income)) %>%
+  mutate(per_change = (avg_inc/lag(avg_inc) - 1) * 100) %>%
+  select(county, avg_inc, per_change, year)
+data_perchange_inc
+
+# eliminate the NA values in the data_percentage_inc variable which includes the values for 2010
+data_perchange_inc <- subset(data_perchange_inc, !is.na(per_change))
+
+# using the tigris package to create 
+counties <- counties("Georgia", cb = TRUE)
+
+```
+
+Here, the *data_perchange_inc* is joined with the spatial data. The first 10 rows are show in the merged dataset below
+```{r ,message=FALSE}
+# Using the Tigris function geo_join to bring together 
+# the state shapefile and the georgia stroke mortality data -- NAMES and county
+# are the two columns that these two sets will be joined by
+merged_gadata_inc <- left_join(counties, data_perchange_inc, by = c("NAME" = "county"))
+head(merged_gadata_inc)
+```
+
+**Creating map variables for interactive map using leaflet package**
+
+```{r, results='hide',message=FALSE,include=FALSE}
+#The code below shows the variables (based on income) that are used for the interactive map. Included are the variables from the merged dataset for the individual years, the color palette for the legend, the text with information for each county, and a title for the map.
+
+# creating subsets of the data for different two-year intervals 
+merged_gadata_2011_inc <- merged_gadata_inc %>%
+  filter(year == 2011)
+merged_gadata_2012_inc <- merged_gadata_inc %>%
+  filter(year == 2012)
+merged_gadata_2013_inc <- merged_gadata_inc %>%
+  filter(year == 2013)
+merged_gadata_2014_inc <- merged_gadata_inc %>%
+  filter(year == 2014)
+merged_gadata_2015_inc <- merged_gadata_inc %>%
+  filter(year == 2015)
+merged_gadata_2016_inc <- merged_gadata_inc %>%
+  filter(year == 2016)
+merged_gadata_2017_inc <- merged_gadata_inc %>%
+  filter(year == 2017)
+merged_gadata_2018_inc <- merged_gadata_inc %>%
+  filter(year == 2018)
+merged_gadata_2019_inc <- merged_gadata_inc %>%
+  filter(year == 2019)
+
+# Creating a color palette based on the mortality rate range in the original data set
+pal_inc <- colorNumeric("Purples", domain = merged_gadata_inc$per_change, reverse = FALSE)
+
+# Setting up the pop up text that will be displayed on the map for each interval 
+popup_text_2011_inc <- paste0("<strong> county name: </strong>", merged_gadata_2011_inc$NAME, "<br>",
+                          "<strong> per capita income % change: </strong>", merged_gadata_2011_inc$per_change, "<br>",
+                          "<strong> average per capita income: </strong> $", merged_gadata_2011_inc$avg_inc)
+popup_text_2012_inc <- paste0("<strong> county name: </strong>", merged_gadata_2012_inc$NAME, "<br>",
+                          "<strong> per capita income % change: </strong>", merged_gadata_2012_inc$per_change, "<br>",
+                          "<strong> average per capita income: </strong> $", merged_gadata_2012_inc$avg_inc)
+popup_text_2013_inc <- paste0("<strong> county name: </strong>", merged_gadata_2013_inc$NAME, "<br>",
+                          "<strong> per capita income % change: </strong>", merged_gadata_2013_inc$per_change, "<br>",
+                          "<strong> average per capita income: </strong> $", merged_gadata_2013_inc$avg_inc)
+popup_text_2014_inc <- paste0("<strong> county name: </strong>", merged_gadata_2014_inc$NAME, "<br>",
+                          "<strong> per capita income % change: </strong>", merged_gadata_2014_inc$per_change, "<br>",
+                          "<strong> average per capita income: </strong> $", merged_gadata_2014_inc$avg_inc)
+popup_text_2015_inc <- paste0("<strong> county name: </strong>", merged_gadata_2015_inc$NAME, "<br>",
+                          "<strong> per capita income % change: </strong>", merged_gadata_2015_inc$per_change, "<br>",
+                          "<strong> average per capita income: </strong> $", merged_gadata_2015_inc$avg_inc)
+popup_text_2016_inc <- paste0("<strong> county name: </strong>", merged_gadata_2016_inc$NAME, "<br>",
+                          "<strong> per capita income % change: </strong>", merged_gadata_2016_inc$per_change, "<br>",
+                          "<strong> average per capita income: </strong> $", merged_gadata_2016_inc$avg_inc)
+popup_text_2017_inc <- paste0("<strong> county name: </strong>", merged_gadata_2017_inc$NAME, "<br>",
+                          "<strong> per capita income % change: </strong>", merged_gadata_2017_inc$per_change, "<br>",
+                          "<strong> average per capita income: </strong> $", merged_gadata_2017_inc$avg_inc)
+popup_text_2018_inc <- paste0("<strong> county name: </strong>", merged_gadata_2018_inc$NAME, "<br>",
+                          "<strong> per capita income % change: </strong>", merged_gadata_2018_inc$per_change, "<br>",
+                          "<strong> average per capita income: </strong> $", merged_gadata_2018_inc$avg_inc)
+popup_text_2019_inc <- paste0("<strong> county name: </strong>", merged_gadata_2019_inc$NAME, "<br>",
+                          "<strong> per capita income % change: </strong>", merged_gadata_2019_inc$per_change, "<br>",
+                          "<strong> average per capita income: </strong> $", merged_gadata_2019_inc$avg_inc)
+
+
+# creating title for map
+tag.map.title <- tags$style(HTML("
+  .leaflet-control.map-title { 
+    transform: translate(-50%,20%);
+    position: fixed !important;
+    left: 50%;
+    text-align: center;
+    padding-left: 10px; 
+    padding-right: 10px; 
+    background: rgba(255,255,255,0.75);
+    font-weight: bold;
+    font-size: 18px;
+  }
+"))
+
+title <- tags$div(
+  tag.map.title, HTML("Percent Change (%) <br> Per Capita Income <br> (2010-2019)")
+)  
+
+```
+
+Below is the code for the interactive map. The color is determined by the percent change in *per capita income* across the entire decade (with the exception of 2020). Added information are each of the county names and average income *per capita* for each county per year.   
+```{r, warning=FALSE}
+# Mapping the data with the new tiles
+leaflet(width = "900",height = "750") %>%
+  addTiles() %>%
+  addPolygons(data = merged_gadata_2011_inc, fillColor = ~pal_inc(merged_gadata_2011_inc$per_change),
+              fillOpacity = 0.7,
+              weight = 1,
+              color = "white",
+              smoothFactor = 0.5,
+              popup = ~popup_text_2011_inc,
+              group = "2010-2011") %>%
+  addPolygons(data = merged_gadata_2012_inc, fillColor = ~pal_inc(merged_gadata_2012_inc$per_change),
+              fillOpacity = 0.7,
+              weight = 1,
+              color = "white",
+              smoothFactor = 0.5,
+              popup = ~popup_text_2012_inc,
+              group = "2011-2012") %>%
+  addPolygons(data = merged_gadata_2013_inc, fillColor = ~pal_inc(merged_gadata_2013_inc$per_change),
+              fillOpacity = 0.7,
+              weight = 1,
+              color = "white",
+              smoothFactor = 0.5,
+              popup = ~popup_text_2013_inc,
+              group = "2012-2013") %>%
+  addPolygons(data = merged_gadata_2014_inc, fillColor = ~pal_inc(merged_gadata_2014_inc$per_change),
+              fillOpacity = 0.7,
+              weight = 1,
+              color = "white",
+              smoothFactor = 0.5,
+              popup = ~popup_text_2014_inc,
+              group = "2013-2014") %>%
+  addPolygons(data = merged_gadata_2015_inc, fillColor = ~pal_inc(merged_gadata_2015_inc$per_change),
+              fillOpacity = 0.7,
+              weight = 1,
+              color = "white",
+              smoothFactor = 0.5,
+              popup = ~popup_text_2015_inc,
+              group = "2014-2015") %>%
+  addPolygons(data = merged_gadata_2016_inc, fillColor = ~pal_inc(merged_gadata_2016_inc$per_change),
+              fillOpacity = 0.7,
+              weight = 1,
+              color = "white",
+              smoothFactor = 0.5,
+              popup = ~popup_text_2016_inc,
+              group = "2015-2016") %>%
+  addPolygons(data = merged_gadata_2017_inc, fillColor = ~pal_inc(merged_gadata_2017_inc$per_change),
+              fillOpacity = 0.7,
+              weight = 1,
+              color = "white",
+              smoothFactor = 0.5,
+              popup = ~popup_text_2017_inc,
+              group = "2016-2017") %>%
+  addPolygons(data = merged_gadata_2018_inc, fillColor = ~pal_inc(merged_gadata_2018_inc$per_change),
+              fillOpacity = 0.7,
+              weight = 1,
+              color = "white",
+              smoothFactor = 0.5,
+              popup = ~popup_text_2018_inc,
+              group = "2017-2018") %>%
+  addPolygons(data = merged_gadata_2019_inc, fillColor = ~pal_inc(merged_gadata_2019_inc$per_change),
+              fillOpacity = 0.7,
+              weight = 1,
+              color = "white",
+              smoothFactor = 0.5,
+              popup = ~popup_text_2019_inc,
+              group = "2018-2019") %>%
+  addLegend(pal = pal_inc,
+            values = merged_gadata_inc$per_change,
+            position = "topright",
+            title = "% Change", 
+            labFormat = labelFormat(suffix = "%")) %>%
+  addControl(title, position = "topleft",className = "map-title") %>%
+  addLayersControl(
+    baseGroups = c("2010-2011","2012-2013","2013-2014","2014-2015","2015-2016","2016-2017","2017-2018","2018-2019"),
+    position = "topright",
+    options = layersControlOptions(collapsed = FALSE)
+  )
+
+
+```
+
+#### Income Analysis
+The overall trend of the map shows that income levels remain relatively similar to one another, being within -5% to 5% change for each two-year interval. The only counties that experience major percent changes in income are outside of the Atlanta metropolitan regions and are located further south of Atlanta. Some examples are Baker county (+19%) for 2010-2011, Taylor county (+14%) for 2015-2016, and Stewart county (+14%) for 2012-2013. Overall, the trends for income are steady over the years, with few counties experiencing major percent changes. Northern counties maintain a steady positive rate whereas southern counties fluctuate between negative and positive percent changes over the decade.
+
+#### Overall Assessment
+It is difficult to notice any particular trend between the stroke mortality rates and income when considering percent changes. Further numerical analyses on stroke mortality rates and income were considered to examine if there is a correlation between the stroke mortality rates and income. A correlation analysis is considered to provide numerical results that would suggest a relationship between the two variables which the maps seemingly do little to provide. Ages groups are also considered separately based on differences in stroke mortality rates over the decade. 
+
+### Frequency Plots for Stroke Mortality and Income over Two-Year Intervals
+Below are the frequency plots for all counties in GA across all two-year intervals. The average rates and percent changes are both given for each two-year interval. This is so both graphs can be compared to observe any noticeable trends that may not be apparent in one or the other. Particular attention was paid to percent changes, as these were provided in the choropleth maps shown above. These give a clearer understanding of the distribution of percent changes over the decade for each two-year interval, which the maps are unable to present concisely. This is compared to the change in income distribution across the same time intervals to further understand the per changes over the decade and come to the conclusion if the correlation between these two variables can lead us to hypothesize any causal relationships that might exist that would explain the correlation we notice between the two variables.
+
+```{r, results='hold'}
+# changing the year variable from numeric to factor for plot below 
+data_perchange_stroke_old$year <- as.factor(data_perchange_stroke_old$year)
+data_perchange_stroke_young$year <- as.factor(data_perchange_stroke_young$year)
+
+# creating new variable for two-year intervals in which percent changes were calculated for.
+# This was done by creating a matrix and joining it with the data_perchange_stroke dataset
+intervals <- matrix(
+  c(2011,2012,2013,2014,2015,2016,2017,2018,2019, "2010-2011","2011-2012","2012-2013","2013-2014","2014-2015","2015-2016","2016-2017", "2017-2018","2018-2019"),
+  nrow = 9, # number of rows
+  ncol = 2, # number of columns 
+  byrow = FALSE
+  
+)
+# creating names for rows and columns 
+colnames(intervals) = c("year","year_int")
+
+# converting the matrix into a tibble 
+intervals <- as_tibble(intervals)
+
+# converting year variable from string to factor
+intervals$year <- as.factor(intervals$year)
+
+# joining the two datasets together so that the year intervals are included as shown in the chloropleth maps
+data_perchange_stroke_old <- left_join(data_perchange_stroke_old, intervals, by = "year")
+data_perchange_stroke_young <- left_join(data_perchange_stroke_young, intervals, by = "year")
+```
+
+Frequency graphs for each of the age groups (along with the average mortality stroke rates) are given below
+
+##### Frequency plots (Older Population)
+```{r , warning=FALSE,message=FALSE}
+# plotting data for average stroke mortality into frequency chart by year 
+ggplot(data_perchange_stroke_old, aes(avg_mort, color = year_int)) +
+  geom_freqpoly(linewidth = 0.5, binwidth = 30) +
+  scale_color_manual(values = c("black","red","blue","green","purple","yellow","orange","pink","magenta")) +
+ labs(title = "Average Stroke Mortality Rates for Older Population over Two-Year Intervals") +
+  xlab("Average Stroke Mortality Rate (per 100,000)") +
+  ylab("Frequency")
+
+# plotting data into frequency chart by year 
+ggplot(data_perchange_stroke_old, aes(per_change, color = year_int)) +
+  geom_freqpoly(linewidth = 0.5) +
+  scale_color_manual(values = c("black","red","blue","green","purple","yellow","orange","pink","magenta")) +
+ labs(title = "Percent Change in Stroke Mortality Rates for Older Population over Two-Year Intervals") +
+  xlab("% Change") +
+  ylab("Frequency")
+```
+
+##### Analysis
+For the average number of stroke mortality rates, the data is centered mostly around 300 mortalities per 100,000 people. There are slight variations in mortality rates for each of the two-year intervals. The data also appears to trail off to the right towards the 500 mortalities per 100,000 rate where there are few observations in the data; however, there is no noticeable "jump" in the data for any of the intervals. Few of the intervals show a rightward slant towards the upper 300 rate. For the percent change in stroke mortality rates, the greatest positive percent changes occur in the following intervals: 2013-2014, 2014-2015, and 2017-2018. The remaining time intervals display a percent decrease in mortality rates for the decade for the older population.
+
+##### Frequency plots (Younger Population)
+```{r , warning=FALSE,message=FALSE}
+# plotting data for average stroke mortality into frequency chart by year 
+ggplot(data_perchange_stroke_young, aes(avg_mort, color = year_int)) +
+  geom_freqpoly(linewidth = 0.5, binwidth = 3) +
+  scale_color_manual(values = c("black","red","blue","green","purple","yellow","orange","pink","magenta")) +
+ labs(title = "Average Stroke Mortality Rates for Younger Population over Two-Year Intervals") +
+  xlab("Average Stroke Mortality Rate (per 100,000)") +
+  ylab("Frequency")
+
+# plotting data into frequency chart by year 
+ggplot(data_perchange_stroke_young, aes(per_change, color = year_int)) +
+  geom_freqpoly(linewidth = 0.5) +
+  scale_color_manual(values = c("black","red","blue","green","purple","yellow","orange","pink","magenta")) +
+ labs(title = "Percent Change in Stroke Mortality Rates for Younger Population over Two-Year Intervals") +
+  xlab("% Change") +
+  ylab("Frequency")
+```
+##### Analysis 
+
+The shape of the data follows a left-skewed distribution which differs from that of the older population (which is more symmetric). This indicates that there are more cases (with lower rates) of stroke mortality than there are cases with higher rates of stroke mortality for all counties. Like the older population, the largest percent increases occur during the 2013-2014 and 2014-2015 intervals. 
+
+##### Frequency plot (Income)
+
+```{r, results='hold', warning=FALSE,message=FALSE}
+# making year variable from double into factor 
+data_perchange_inc$year <- as.factor(data_perchange_inc$year)
+
+# joining the two datasets together so that the year intervals are included as shown in the chloropleth maps
+data_perchange_inc <- left_join(data_perchange_inc, intervals, by = "year")
+
+# plotting data into frequency chart by year 
+ggplot(data_perchange_inc, aes(avg_inc, color = year_int)) +
+  geom_freqpoly(linewidth = 0.5) +
+  scale_color_manual(values = c("black","red","blue","green","purple","yellow","orange","pink","magenta")) +
+ labs(title = "Average Income over Two-Year Intervals") +
+  xlab("Average Per Capita Income") +
+  ylab("Frequency")
+
+# plotting data into frequency chart by year 
+ggplot(data_perchange_inc, aes(per_change, color = year_int)) +
+  geom_freqpoly(linewidth = 0.5) +
+  scale_color_manual(values = c("black","red","blue","green","purple","yellow","orange","pink","magenta")) +
+ labs(title = "Percent Change in Income over Two-Year Intervals") +
+  xlab("% Change") +
+  ylab("Frequency")
+```
+
+##### Analysis 
+
+The average income over the decade steadily increases for all counties and trails off towards $100,000. The percent change for the income is mostly symmetrical, but clearly indicates that the data is concentrated between 0% and 10%. All intervals with the exception of the 2011-2012 interval peak above 30 and the interval with the largest peak is 2018-2019.
+
+### Overall Analysis
+the average income over the decade steadily increases over time whereas the stroke mortality rates differ between the two age groups. The years that experience negative percent changes tended to have lowers average incomes. This was true for the 2010-2011 interval which had the greatest decreases in stroke mortality and income for all the years and in both age groups. Overall, an argument in favor for a specific trend between average per capita income and stroke mortality rates is reasonable when viewing the behavior of the data over the decade for stroke mortality -- both average rates and percent changes.   
+
+
