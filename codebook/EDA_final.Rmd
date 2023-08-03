@@ -8,10 +8,8 @@ date: "2023-07-18"
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
-library(ggplot2)
 library(cowplot)
 library(scales)
-library(dplyr)
 ```
 
 
