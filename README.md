@@ -1,80 +1,50 @@
-*Instructions: Click on the raw button in the upper right hand corner of this box.  Copy and paste the template into the README.md document on your github.  Fill in the titles, information and links where prompted! Feel free to stray a bit to suit your project but try to stick to the format as closely as possible for consistency across DSWG projects.*
-
 # Project Name
-This project is a part of the [Data Science Working Group](http://datascience.codeforsanfrancisco.org) at [Code for San Francisco](http://www.codeforsanfrancisco.org).  Other DSWG projects can be found at the [main GitHub repo](https://github.com/sfbrigade/data-science-wg).
+This project is an exploratory data analysis (EDA) on the data set of stroke risk factors.
 
-#### -- Project Status: [Active, On-Hold, Completed]
+#### -- Project Status: Completed
 
 ## Project Intro/Objective
 The purpose of this project is ________. (Describe the main goals of the project and potential civic impact. Limit to a short paragraph, 3-6 Sentences)
 
-### Partner
-* [Name of Partner organization/Government department etc..]
-* Website for partner
-* Partner contact: [Name of Contact], [slack handle of contact if any]
-* If you do not have a partner leave this section out
-
 ### Methods Used
-* Inferential Statistics
-* Machine Learning
+* Basic Statistics
+* Student's T-Test
 * Data Visualization
-* Predictive Modeling
-* etc.
+* Interactive Maps
 
 ### Technologies
 * R 
-* Python
-* D3
-* PostGres, MySql
-* Pandas, jupyter
 * HTML
-* JavaScript
-* etc. 
 
 ## Project Description
-(Provide more detailed overview of the project.  Talk a bit about your data sources and what questions and hypothesis you are exploring. What specific data analysis/visualization and modelling work are you using to solve the problem? What blockers and challenges are you facing?  Feel free to number or bullet point things here)
+This project provides a correlation analysis between stroke mortality rates and income. Because stroke mortality rates differ between age groups, correlation analyses are categorized according to 35-64 years old and 65+ years old age groups. This is accompanied by maps to depict the stroke mortality percent changes over the decade of 2010-2019.
 
-## Needs of this project
+What are the research questions?
+ * Is income related to stroke mortality rates?
+ * Do correlational analyses from current research support a relationship between these variables?
+ * Do specific counties/locales present stronger evidence to support/not support a correlation between income and stroke mortality?
 
-- frontend developers
-- data exploration/descriptive statistics
-- data processing/cleaning
-- statistical modeling
-- writeup/reporting
-- etc. (be as specific as possible)
+What are specific models and visualization techniques used in the project?
+ * T-test for correlation coefficients
+ * Line charts, correlation coefficient heat map, interactive choropleth map, frequency charts
+
+Next steps and future directions
+ * Isolate counties and locales within Georgia that display clusters of the greatest increases/decreases in stroke mortality and further analyze relationships between income levels and stroke mortality
+
 
 ## Getting Started
 
 1. Clone this repo (for help see this [tutorial](https://help.github.com/articles/cloning-a-repository/)).
-2. Raw Data is being kept [here](Repo folder containing raw data) within this repo.
+2. Open the EDA_final.html (codebook/EDA_final.html) directly to view the result of analysis.
+3. If you wish to interact with the original R codes we used to generate the analysis, you could either:
+   * open EDA_final.Rmd (codebook/EDA_final.Rmd) in your computer if RStudio has been installed
+   * use the virtual environment here: [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/radioactive235/EDA-Project.git/HEAD) (note: any changes made in this virtual envrionment will NOT be 
+     saved!)
 
-    *If using offline data mention that and how they may obtain the data from the froup)*
-    
-3. Data processing/transformation scripts are being kept [here](Repo folder containing data processing scripts/notebooks)
-4. etc...
-
-*If your project is well underway and setup is fairly complicated (ie. requires installation of many packages) create another "setup.md" file and link to it here*  
-
-5. Follow setup [instructions](Link to file)
 
 ## Featured Notebooks/Analysis/Deliverables
-* [Notebook/Markdown/Slide Deck Title](link)
-* [Notebook/Markdown/Slide DeckTitle](link)
-* [Blog Post](link)
+* EDA_final.Rmd (codebook/EDA_final.Rmd)
 
 
-## Contributing DSWG Members
-
-**Team Leads (Contacts) : [Full Name](https://github.com/[github handle])(@slackHandle)**
-
-#### Other Members:
-
-|Name     |  Slack Handle   | 
-|---------|-----------------|
-|[Full Name](https://github.com/[github handle])| @johnDoe        |
-|[Full Name](https://github.com/[github handle]) |     @janeDoe    |
-
-## Contact
-* If you haven't joined the SF Brigade Slack, [you can do that here](http://c4sf.me/slack).  
-* Our slack channel is `#datasci-projectname`
-* Feel free to contact team leads with any questions or if you are interested in contributing!
+## Contributing Members
+* Anji Ni and Jared Darrow
